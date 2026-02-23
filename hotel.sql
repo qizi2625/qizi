@@ -46,3 +46,44 @@ INSERT INTO `user` (`username`, `password`, `phone`, `real_name`, `role_id`, `st
 ('admin', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13800000001', '管理员', 1, 1),
 ('landlord1', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13800000002', '张房东', 2, 1),
 ('tenant1', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13900000001', '王租客', 3, 1);
+
+-- 房源表
+CREATE TABLE `house` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '房源ID',
+    `title` VARCHAR(100) NOT NULL COMMENT '房源标题',
+    `description` TEXT COMMENT '房源描述',
+    `price` DECIMAL(10,2) NOT NULL COMMENT '月租金（元）',
+    `area` DECIMAL(8,2) COMMENT '面积（平方米）',
+    `bedroom_count` INT DEFAULT 1 COMMENT '卧室数量',
+    `living_room_count` INT DEFAULT 1 COMMENT '客厅数量',
+    `bathroom_count` INT DEFAULT 1 COMMENT '卫生间数量',
+    `floor` VARCHAR(20) COMMENT '所在楼层',
+    `property_type` VARCHAR(20) COMMENT '房产类型',
+    `decoration` VARCHAR(20) COMMENT '装修情况',
+    `orientation` VARCHAR(10) COMMENT '朝向',
+    `province` VARCHAR(50) COMMENT '省份',
+    `city` VARCHAR(50) COMMENT '城市',
+    `district` VARCHAR(50) COMMENT '区域',
+    `address` VARCHAR(200) NOT NULL COMMENT '详细地址',
+    `landlord_id` BIGINT NOT NULL COMMENT '房东ID',
+    `status` TINYINT DEFAULT 0 COMMENT '状态：0-待审核，1-已上架，2-已下架，3-已出租',
+    `view_count` INT DEFAULT 0 COMMENT '浏览次数',
+    `favorite_count` INT DEFAULT 0 COMMENT '收藏次数',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '发布时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX `idx_landlord_id` (`landlord_id`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_city_district` (`city`, `district`),
+    INDEX `idx_price` (`price`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='房源表';
+
+-- 房源图片表
+CREATE TABLE `house_image` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `house_id` BIGINT NOT NULL COMMENT '房源ID',
+    `image_url` VARCHAR(500) NOT NULL COMMENT '图片URL',
+    `sort` INT DEFAULT 0 COMMENT '排序',
+    `type` TINYINT DEFAULT 1 COMMENT '类型：1-封面图，2-普通图',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY `idx_house_id` (`house_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='房源图片表';
