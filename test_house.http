@@ -1,0 +1,86 @@
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### 1. 登录获取token（用房东账号）
+# @name login
+POST {{baseUrl}}/api/user/login?username=landlord2&password=123456
+
+### 2. 保存token
+@authToken = {{login.response.body.data.token}}
+
+### 3. 发布房源
+POST {{baseUrl}}/api/house/publish
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "title": "望京南地铁站精装一居",
+    "description": "临近地铁，步行5分钟，精装修，家具齐全",
+    "price": 4800.00,
+    "area": 42.5,
+    "bedroomCount": 1,
+    "livingRoomCount": 1,
+    "bathroomCount": 1,
+    "floor": "15/25",
+    "propertyType": "公寓",
+    "decoration": "精装",
+    "orientation": "南",
+    "province": "北京市",
+    "city": "北京市",
+    "district": "朝阳区",
+    "address": "望京街10号院3号楼1502",
+    "imageUrls": [
+        "https://example.com/images/house1_cover.jpg",
+        "https://example.com/images/house1_1.jpg",
+        "https://example.com/images/house1_2.jpg"
+    ]
+}
+
+### 4. 查询房源列表（分页）
+GET {{baseUrl}}/api/house/list?city=北京市&district=朝阳区&page=1&size=10
+
+### 5. 查询房源详情（替换为实际ID）
+GET {{baseUrl}}/api/house/detail/1
+
+### 6. 查询当前房东的房源
+GET {{baseUrl}}/api/house/my-houses
+Authorization: Bearer {{authToken}}
+
+### 7. 更新房源（替换为实际ID）
+PUT {{baseUrl}}/api/house/update/4
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "title": "望京南地铁站精装一居（已更新）",
+    "description": "全新装修，首次出租",
+    "price": 5000.00,
+    "area": 42.5,
+    "bedroomCount": 1,
+    "livingRoomCount": 1,
+    "bathroomCount": 1,
+    "floor": "15/25",
+    "propertyType": "公寓",
+    "decoration": "精装",
+    "orientation": "南",
+    "province": "北京市",
+    "city": "北京市",
+    "district": "朝阳区",
+    "address": "望京街10号院3号楼1502",
+    "imageUrls": [
+        "https://example.com/images/house1_cover_new.jpg",
+        "https://example.com/images/house1_1_new.jpg"
+    ]
+}
+
+### 8. 上架房源
+PUT {{baseUrl}}/api/house/online/4
+Authorization: Bearer {{authToken}}
+
+### 9. 下架房源
+PUT {{baseUrl}}/api/house/offline/4
+Authorization: Bearer {{authToken}}
+
+### 10. 删除房源
+DELETE {{baseUrl}}/api/house/delete/4
+Authorization: Bearer {{authToken}}

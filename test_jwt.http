@@ -18,3 +18,16 @@ GET {{baseUrl}}/api/user/current
 ### 5. 测试带错误token
 GET {{baseUrl}}/api/user/current
 Authorization: Bearer xxx.yyy.zzz
+
+### 注册新房东
+POST http://localhost:8080/api/user/register
+Content-Type: application/json
+
+{
+    "username": "landlord2",
+    "password": "123456",
+    "phone": "13888888888",
+    "email": "landlord2@example.com",
+    "realName": "新房东",
+    "roleId": 2
+}
