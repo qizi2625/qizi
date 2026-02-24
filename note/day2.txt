@@ -1,0 +1,525 @@
+第二天：数据库设计与用户模块基础
+📋 今日任务清单
+设计RBAC权限模型的数据库表
+
+创建实体类
+
+实现用户注册接口
+
+实现用户登录接口（简单版，暂不加JWT）
+
+一、RBAC数据库表设计
+根据你的毕设需求，我们需要以下核心表：
+
+1. 用户表 (user)
+sql
+CREATE TABLE `user` (
+    `id` bigint PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
+    `username` varchar(50) NOT NULL COMMENT '用户名',
+    `password` varchar(100) NOT NULL COMMENT '密码（加密存储）',
+    `phone` varchar(20) COMMENT '手机号',
+    `email` varchar(100) COMMENT '邮箱',
+    `avatar` varchar(500) COMMENT '头像URL',
+    `real_name` varchar(50) COMMENT '真实姓名',
+    `id_card` varchar(18) COMMENT '身份证号',
+    `role_id` bigint COMMENT '角色ID',
+    `status` tinyint DEFAULT 1 COMMENT '状态：0-禁用，1-正常',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+2. 角色表 (role)
+sql
+CREATE TABLE `role` (
+    `id` bigint PRIMARY KEY AUTO_INCREMENT COMMENT '角色ID',
+    `role_name` varchar(50) NOT NULL COMMENT '角色名称',
+    `role_code` varchar(50) NOT NULL COMMENT '角色编码（如：ADMIN, LANDLORD, TENANT）',
+    `description` varchar(200) COMMENT '角色描述',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
+3. 权限表 (permission)
+sql
+CREATE TABLE `permission` (
+    `id` bigint PRIMARY KEY AUTO_INCREMENT COMMENT '权限ID',
+    `permission_name` varchar(50) NOT NULL COMMENT '权限名称',
+    `permission_code` varchar(100) NOT NULL COMMENT '权限编码（如：house:add, order:view）',
+    `type` tinyint COMMENT '类型：1-菜单，2-按钮',
+    `parent_id` bigint DEFAULT 0 COMMENT '父权限ID',
+    `path` varchar(200) COMMENT '路由路径',
+    `create_time` datetime DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='权限表';
+4. 角色-权限关联表 (role_permission)
+sql
+CREATE TABLE `role_permission` (
+    `id` bigint PRIMARY KEY AUTO_INCREMENT,
+    `role_id` bigint NOT NULL COMMENT '角色ID',
+    `permission_id` bigint NOT NULL COMMENT '权限ID',
+    KEY `idx_role_id` (`role_id`),
+    KEY `idx_permission_id` (`permission_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色权限关联表';
+二、插入初始数据
+执行以下SQL插入基础角色和测试用户：
+
+sql
+-- 插入角色
+INSERT INTO `role` (`role_name`, `role_code`) VALUES 
+('管理员', 'ADMIN'),
+('房东', 'LANDLORD'),
+('租客', 'TENANT');
+
+-- 插入测试用户（密码：123456，要用BCrypt加密，我们先用明文，后续再加）
+INSERT INTO `user` (`username`, `password`, `phone`, `role_id`) VALUES 
+('admin', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13800000001', 1),  -- 密码:123456
+('landlord1', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13800000002', 2),
+('tenant1', '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOZTH.ulu33dHOiBE8ByOhJIrdAu2', '13800000003', 3);
+⚠️ 注意：上面的加密密码是 123456 的BCrypt哈希值。我们马上会在代码里实现密码加密。
+
+三、创建实体类
+在 entity 包下创建对应的实体类：
+
+User.java
+java
+package com.example.houserentalsystem.entity;
+
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+public class User {
+    private Long id;
+    private String username;
+    private String password;
+    private String phone;
+    private String email;
+    private String avatar;
+    private String realName;
+    private String idCard;
+    private Long roleId;
+    private Integer status;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
+}
+Role.java
+java
+package com.example.houserentalsystem.entity;
+
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+public class Role {
+    private Long id;
+    private String roleName;
+    private String roleCode;
+    private String description;
+    private LocalDateTime createTime;
+}
+四、添加密码加密依赖
+在 pom.xml 中添加Spring Security依赖（仅用于密码加密，不用它的权限框架）：
+
+xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+添加后记得刷新Maven。
+
+五、配置密码加密工具类
+在 utils 包下创建 PasswordEncoderUtil.java：
+
+java
+package com.example.houserentalsystem.utils;
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
+
+@Component
+public class PasswordEncoderUtil {
+    
+    private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+    
+    /**
+     * 加密密码
+     */
+    public String encode(String rawPassword) {
+        return encoder.encode(rawPassword);
+    }
+    
+    /**
+     * 匹配密码
+     */
+    public boolean matches(String rawPassword, String encodedPassword) {
+        return encoder.matches(rawPassword, encodedPassword);
+    }
+}
+六、创建用户模块的Mapper和Service
+1. 创建UserMapper接口
+在 mapper 包下创建 UserMapper.java：
+
+java
+package com.example.houserentalsystem.mapper;
+
+import com.example.houserentalsystem.entity.User;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+@Mapper
+public interface UserMapper {
+    
+    /**
+     * 根据用户名查询用户
+     */
+    User findByUsername(@Param("username") String username);
+    
+    /**
+     * 根据手机号查询用户
+     */
+    User findByPhone(@Param("phone") String phone);
+    
+    /**
+     * 插入新用户
+     */
+    int insert(User user);
+    
+    /**
+     * 根据ID查询用户
+     */
+    User findById(@Param("id") Long id);
+}
+2. 创建Mapper XML文件
+在 resources/mapper 目录下创建 UserMapper.xml：
+
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.UserMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.User">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+        <result column="phone" property="phone"/>
+        <result column="email" property="email"/>
+        <result column="avatar" property="avatar"/>
+        <result column="real_name" property="realName"/>
+        <result column="id_card" property="idCard"/>
+        <result column="role_id" property="roleId"/>
+        <result column="status" property="status"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, username, password, phone, email, avatar, real_name, id_card, 
+        role_id, status, create_time, update_time
+    </sql>
+    
+    <select id="findByUsername" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user
+        WHERE username = #{username}
+    </select>
+    
+    <select id="findByPhone" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user
+        WHERE phone = #{phone}
+    </select>
+    
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user
+        WHERE id = #{id}
+    </select>
+    
+    <insert id="insert" parameterType="com.example.houserentalsystem.entity.User" 
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user (
+            username, password, phone, email, avatar, 
+            real_name, id_card, role_id, status
+        ) VALUES (
+            #{username}, #{password}, #{phone}, #{email}, #{avatar},
+            #{realName}, #{idCard}, #{roleId}, #{status}
+        )
+    </insert>
+    
+</mapper>
+3. 创建UserService接口
+在 service 包下创建 UserService.java：
+
+java
+package com.example.houserentalsystem.service;
+
+import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.dto.RegisterDTO;
+
+public interface UserService {
+    
+    /**
+     * 用户注册
+     */
+    User register(RegisterDTO registerDTO);
+    
+    /**
+     * 用户登录
+     */
+    User login(String username, String password);
+    
+    /**
+     * 根据ID查询用户
+     */
+    User getById(Long id);
+}
+4. 创建DTO类
+在 dto 包下创建 RegisterDTO.java：
+
+java
+package com.example.houserentalsystem.dto;
+
+import lombok.Data;
+
+@Data
+public class RegisterDTO {
+    private String username;
+    private String password;
+    private String phone;
+    private String email;
+    private String realName;
+    private String idCard;
+    private Long roleId;  // 默认租客为3，房东为2
+}
+5. 实现UserService
+在 service/impl 包下创建 UserServiceImpl.java：
+
+java
+package com.example.houserentalsystem.service.impl;
+
+import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.mapper.UserMapper;
+import com.example.houserentalsystem.service.UserService;
+import com.example.houserentalsystem.dto.RegisterDTO;
+import com.example.houserentalsystem.utils.PasswordEncoderUtil;
+import com.example.houserentalsystem.common.BusinessException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserServiceImpl implements UserService {
+
+    @Autowired
+    private UserMapper userMapper;
+    
+    @Autowired
+    private PasswordEncoderUtil passwordEncoder;
+    
+    @Override
+    public User register(RegisterDTO registerDTO) {
+        // 1. 检查用户名是否已存在
+        User existingUser = userMapper.findByUsername(registerDTO.getUsername());
+        if (existingUser != null) {
+            throw new BusinessException("用户名已存在");
+        }
+        
+        // 2. 检查手机号是否已存在
+        existingUser = userMapper.findByPhone(registerDTO.getPhone());
+        if (existingUser != null) {
+            throw new BusinessException("手机号已注册");
+        }
+        
+        // 3. 创建新用户
+        User user = new User();
+        user.setUsername(registerDTO.getUsername());
+        user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
+        user.setPhone(registerDTO.getPhone());
+        user.setEmail(registerDTO.getEmail());
+        user.setRealName(registerDTO.getRealName());
+        user.setIdCard(registerDTO.getIdCard());
+        user.setRoleId(registerDTO.getRoleId() != null ? registerDTO.getRoleId() : 3L); // 默认租客
+        user.setStatus(1); // 默认正常
+        
+        // 4. 保存到数据库
+        userMapper.insert(user);
+        
+        return user;
+    }
+    
+    @Override
+    public User login(String username, String password) {
+        // 1. 根据用户名查询用户
+        User user = userMapper.findByUsername(username);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        
+        // 2. 验证密码
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new BusinessException("密码错误");
+        }
+        
+        // 3. 检查用户状态
+        if (user.getStatus() != 1) {
+            throw new BusinessException("账号已被禁用");
+        }
+        
+        return user;
+    }
+    
+    @Override
+    public User getById(Long id) {
+        return userMapper.findById(id);
+    }
+}
+6. 创建自定义异常类
+在 common 包下创建 BusinessException.java：
+
+java
+package com.example.houserentalsystem.common;
+
+public class BusinessException extends RuntimeException {
+    private Integer code;
+    
+    public BusinessException(String message) {
+        super(message);
+        this.code = 500;
+    }
+    
+    public BusinessException(Integer code, String message) {
+        super(message);
+        this.code = code;
+    }
+    
+    public Integer getCode() {
+        return code;
+    }
+}
+七、创建用户控制器
+在 controller 包下创建 UserController.java：
+
+java
+package com.example.houserentalsystem.controller;
+
+import com.example.houserentalsystem.common.Result;
+import com.example.houserentalsystem.dto.RegisterDTO;
+import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/user")
+public class UserController {
+
+    @Autowired
+    private UserService userService;
+
+    /**
+     * 用户注册
+     */
+    @PostMapping("/register")
+    public Result<User> register(@RequestBody RegisterDTO registerDTO) {
+        User user = userService.register(registerDTO);
+        // 返回前清除敏感信息
+        user.setPassword(null);
+        return Result.success("注册成功", user);
+    }
+
+    /**
+     * 用户登录
+     */
+    @PostMapping("/login")
+    public Result<User> login(@RequestParam String username, 
+                              @RequestParam String password) {
+        User user = userService.login(username, password);
+        // 返回前清除敏感信息
+        user.setPassword(null);
+        return Result.success("登录成功", user);
+    }
+
+    /**
+     * 获取用户信息
+     */
+    @GetMapping("/info/{id}")
+    public Result<User> getUserInfo(@PathVariable Long id) {
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        user.setPassword(null);
+        return Result.success(user);
+    }
+}
+八、添加全局异常处理
+在 common 包下创建 GlobalExceptionHandler.java：
+
+java
+package com.example.houserentalsystem.common;
+
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    public Result<String> handleBusinessException(BusinessException e) {
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public Result<String> handleException(Exception e) {
+        e.printStackTrace();  // 打印堆栈信息方便调试
+        return Result.error("系统异常：" + e.getMessage());
+    }
+}
+九、测试接口
+现在可以启动项目测试了：
+
+1. 测试注册接口
+使用Postman或Apifox发送POST请求：
+
+text
+URL: http://localhost:8080/api/user/register
+Headers: Content-Type: application/json
+Body:
+{
+    "username": "testuser",
+    "password": "123456",
+    "phone": "13888888888",
+    "email": "test@example.com",
+    "realName": "测试用户",
+    "roleId": 3
+}
+预期返回：
+
+json
+{
+    "code": 200,
+    "message": "注册成功",
+    "data": {
+        "id": 4,
+        "username": "testuser",
+        "phone": "13888888888",
+        "email": "test@example.com",
+        "roleId": 3,
+        "status": 1,
+        ...
+    }
+}
+2. 测试登录接口
+text
+URL: http://localhost:8080/api/user/login?username=testuser&password=123456
+Method: POST
+预期返回：
+
+json
+{
+    "code": 200,
+    "message": "登录成功",
+    "data": {
+        "id": 4,
+        "username": "testuser",
+        "roleId": 3,
+        ...
+    }
+}

@@ -87,3 +87,69 @@ CREATE TABLE `house_image` (
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
     KEY `idx_house_id` (`house_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='房源图片表';
+
+-- 标签表
+CREATE TABLE IF NOT EXISTS `tag` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '标签ID',
+    `tag_name` VARCHAR(50) NOT NULL COMMENT '标签名称',
+    `tag_code` VARCHAR(50) COMMENT '标签编码（如：near_subway）',
+    `category` VARCHAR(50) COMMENT '标签分类（交通/装修/配套）',
+    `icon` VARCHAR(200) COMMENT '图标URL',
+    `sort` INT DEFAULT 0 COMMENT '排序号',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY `uk_tag_code` (`tag_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='标签表';
+
+-- 房源标签关联表
+CREATE TABLE IF NOT EXISTS `house_tag` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `house_id` BIGINT NOT NULL COMMENT '房源ID',
+    `tag_id` BIGINT NOT NULL COMMENT '标签ID',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY `idx_house_id` (`house_id`),
+    KEY `idx_tag_id` (`tag_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='房源标签关联表';
+
+-- 用户行为表（用于构建用户画像）
+CREATE TABLE IF NOT EXISTS `user_behavior` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `house_id` BIGINT NOT NULL COMMENT '房源ID',
+    `behavior_type` TINYINT NOT NULL COMMENT '行为类型：1-浏览，2-收藏，3-咨询，4-分享',
+    `weight` FLOAT DEFAULT 1.0 COMMENT '行为权重（收藏比浏览权重大）',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '行为时间',
+    KEY `idx_user_id` (`user_id`),
+    KEY `idx_house_id` (`house_id`),
+    KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户行为表';
+
+-- 用户画像表（存储用户偏好标签）
+CREATE TABLE IF NOT EXISTS `user_profile` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `user_id` BIGINT NOT NULL COMMENT '用户ID',
+    `preferred_tags` JSON COMMENT '偏好标签及权重（如：{"近地铁":0.8, "精装修":0.6}）',
+    `price_min` DECIMAL(10,2) COMMENT '偏好价格下限',
+    `price_max` DECIMAL(10,2) COMMENT '偏好价格上限',
+    `preferred_districts` JSON COMMENT '偏好区域（如：["朝阳区","海淀区"]）',
+    `last_update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
+    UNIQUE KEY `uk_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户画像表';
+
+-- 插入基础标签
+INSERT INTO `tag` (`tag_name`, `tag_code`, `category`, `sort`) VALUES 
+('近地铁', 'near_subway', '交通', 1),
+('精装修', 'fine_decorate', '装修', 2),
+('拎包入住', 'move_in_ready', '配套', 3),
+('朝南', 'south_facing', '朝向', 4),
+('独立卫浴', 'private_bath', '配套', 5),
+('可短租', 'short_term', '租期', 6),
+('免中介费', 'no_fee', '费用', 7),
+('民水民电', 'residential_utility', '费用', 8),
+('有电梯', 'has_elevator', '配套', 9),
+('车位', 'parking', '配套', 10),
+('首次出租', 'first_rent', '房源', 11),
+('随时看房', 'available_anytime', '服务', 12);
+
+-- 为已有的房源添加标签（示例，根据你的实际ID调整）
+INSERT INTO `house_tag` (`house_id`, `tag_id`) VALUES 
+(4, 1), (4, 2), (4, 3), (4, 4);  -- 房源4：近地铁、精装修、拎包入住、朝南

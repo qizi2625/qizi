@@ -1,0 +1,947 @@
+第四天：房源模块开发 🏠
+恭喜进入第四天！今天我们要实现房源的核心功能：
+
+今日任务清单
+步骤	任务	说明
+1	创建房源实体类	House.java, HouseImage.java
+2	创建房源 DTO	HousePublishDTO, HouseVO
+3	创建房源 Mapper	HouseMapper, HouseImageMapper
+4	创建房源 Service	发布、查询、详情
+5	创建房源 Controller	接口实现
+6	添加权限控制	只有房东能发布
+7	测试所有接口	用 REST Client
+一、创建实体类
+1.1 House.java
+在 entity 包下创建：
+
+java
+package com.example.houserentalsystem.entity;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Data
+public class House {
+    private Long id;
+    private String title;
+    private String description;
+    private BigDecimal price;
+    private BigDecimal area;
+    private Integer bedroomCount;
+    private Integer livingRoomCount;
+    private Integer bathroomCount;
+    private String floor;
+    private String propertyType;
+    private String decoration;
+    private String orientation;
+    private String province;
+    private String city;
+    private String district;
+    private String address;
+    private Long landlordId;
+    private Integer status;  // 0-待审核，1-已上架，2-已下架，3-已出租
+    private Integer viewCount;
+    private Integer favoriteCount;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
+}
+1.2 HouseImage.java
+java
+package com.example.houserentalsystem.entity;
+
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Data
+public class HouseImage {
+    private Long id;
+    private Long houseId;
+    private String imageUrl;
+    private Integer sort;
+    private Integer type;  // 1-封面图，2-普通图
+    private LocalDateTime createTime;
+}
+二、创建 DTO 类
+2.1 HousePublishDTO.java（发布房源请求）
+在 dto 包下创建：
+
+java
+package com.example.houserentalsystem.dto;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.util.List;
+
+@Data
+public class HousePublishDTO {
+    private String title;
+    private String description;
+    private BigDecimal price;
+    private BigDecimal area;
+    private Integer bedroomCount;
+    private Integer livingRoomCount;
+    private Integer bathroomCount;
+    private String floor;
+    private String propertyType;
+    private String decoration;
+    private String orientation;
+    private String province;
+    private String city;
+    private String district;
+    private String address;
+    private List<String> imageUrls;  // 图片URL列表
+}
+2.2 HouseVO.java（返回给前端的房源视图）
+java
+package com.example.houserentalsystem.vo;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Data
+public class HouseVO {
+    private Long id;
+    private String title;
+    private String description;
+    private BigDecimal price;
+    private BigDecimal area;
+    private Integer bedroomCount;
+    private Integer livingRoomCount;
+    private Integer bathroomCount;
+    private String floor;
+    private String propertyType;
+    private String decoration;
+    private String orientation;
+    private String province;
+    private String city;
+    private String district;
+    private String address;
+    private Long landlordId;
+    private String landlordName;  // 房东姓名
+    private String landlordPhone;  // 房东电话
+    private Integer status;
+    private Integer viewCount;
+    private Integer favoriteCount;
+    private LocalDateTime createTime;
+    private List<String> imageUrls;  // 图片列表
+    private String coverImage;  // 封面图
+}
+2.3 HouseQueryDTO.java（查询参数）
+java
+package com.example.houserentalsystem.dto;
+
+import lombok.Data;
+import java.math.BigDecimal;
+
+@Data
+public class HouseQueryDTO {
+    private String keyword;      // 关键词搜索
+    private String city;         // 城市
+    private String district;     // 区域
+    private BigDecimal minPrice; // 最低价格
+    private BigDecimal maxPrice; // 最高价格
+    private Integer bedroomCount;// 卧室数量
+    private String orientation;  // 朝向
+    private String decoration;   // 装修
+    private Integer page = 1;     // 页码
+    private Integer size = 10;    // 每页大小
+    private String sortBy = "create_time";  // 排序字段
+    private String sortOrder = "desc";      // 排序方向
+}
+三、创建 Mapper 接口和 XML
+3.1 HouseMapper.java
+在 mapper 包下创建：
+
+java
+package com.example.houserentalsystem.mapper;
+
+import com.example.houserentalsystem.entity.House;
+import com.example.houserentalsystem.dto.HouseQueryDTO;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+@Mapper
+public interface HouseMapper {
+    
+    // 插入房源
+    int insert(House house);
+    
+    // 根据ID查询
+    House findById(@Param("id") Long id);
+    
+    // 查询房东的房源列表
+    List<House> findByLandlordId(@Param("landlordId") Long landlordId);
+    
+    // 分页查询房源（带条件）
+    List<House> pageQuery(@Param("query") HouseQueryDTO query);
+    
+    // 查询总数（用于分页）
+    Long countQuery(@Param("query") HouseQueryDTO query);
+    
+    // 更新房源
+    int update(House house);
+    
+    // 删除房源
+    int deleteById(@Param("id") Long id);
+    
+    // 更新房源状态
+    int updateStatus(@Param("id") Long id, @Param("status") Integer status);
+    
+    // 增加浏览次数
+    int incrementViewCount(@Param("id") Long id);
+    
+    // 增加收藏次数
+    int incrementFavoriteCount(@Param("id") Long id);
+}
+3.2 HouseImageMapper.java
+java
+package com.example.houserentalsystem.mapper;
+
+import com.example.houserentalsystem.entity.HouseImage;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
+
+@Mapper
+public interface HouseImageMapper {
+    
+    // 批量插入图片
+    int insertBatch(@Param("list") List<HouseImage> images);
+    
+    // 根据房源ID查询图片
+    List<HouseImage> findByHouseId(@Param("houseId") Long houseId);
+    
+    // 删除房源的所有图片
+    int deleteByHouseId(@Param("houseId") Long houseId);
+    
+    // 获取房源封面图
+    HouseImage findCoverByHouseId(@Param("houseId") Long houseId);
+}
+3.3 HouseMapper.xml
+在 resources/mapper 下创建：
+
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.HouseMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.House">
+        <id column="id" property="id"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="price" property="price"/>
+        <result column="area" property="area"/>
+        <result column="bedroom_count" property="bedroomCount"/>
+        <result column="living_room_count" property="livingRoomCount"/>
+        <result column="bathroom_count" property="bathroomCount"/>
+        <result column="floor" property="floor"/>
+        <result column="property_type" property="propertyType"/>
+        <result column="decoration" property="decoration"/>
+        <result column="orientation" property="orientation"/>
+        <result column="province" property="province"/>
+        <result column="city" property="city"/>
+        <result column="district" property="district"/>
+        <result column="address" property="address"/>
+        <result column="landlord_id" property="landlordId"/>
+        <result column="status" property="status"/>
+        <result column="view_count" property="viewCount"/>
+        <result column="favorite_count" property="favoriteCount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, title, description, price, area, bedroom_count, living_room_count,
+        bathroom_count, floor, property_type, decoration, orientation,
+        province, city, district, address, landlord_id, status,
+        view_count, favorite_count, create_time, update_time
+    </sql>
+    
+    <insert id="insert" parameterType="com.example.houserentalsystem.entity.House" 
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO house (
+            title, description, price, area, bedroom_count, living_room_count,
+            bathroom_count, floor, property_type, decoration, orientation,
+            province, city, district, address, landlord_id, status
+        ) VALUES (
+            #{title}, #{description}, #{price}, #{area}, #{bedroomCount}, #{livingRoomCount},
+            #{bathroomCount}, #{floor}, #{propertyType}, #{decoration}, #{orientation},
+            #{province}, #{city}, #{district}, #{address}, #{landlordId}, #{status}
+        )
+    </insert>
+    
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM house
+        WHERE id = #{id}
+    </select>
+    
+    <select id="findByLandlordId" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM house
+        WHERE landlord_id = #{landlordId}
+        ORDER BY create_time DESC
+    </select>
+    
+    <select id="pageQuery" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM house
+        <where>
+            <if test="query.keyword != null and query.keyword != ''">
+                AND (title LIKE CONCAT('%', #{query.keyword}, '%')
+                OR description LIKE CONCAT('%', #{query.keyword}, '%'))
+            </if>
+            <if test="query.city != null and query.city != ''">
+                AND city = #{query.city}
+            </if>
+            <if test="query.district != null and query.district != ''">
+                AND district = #{query.district}
+            </if>
+            <if test="query.minPrice != null">
+                AND price >= #{query.minPrice}
+            </if>
+            <if test="query.maxPrice != null">
+                AND price &lt;= #{query.maxPrice}
+            </if>
+            <if test="query.bedroomCount != null">
+                AND bedroom_count = #{query.bedroomCount}
+            </if>
+            <if test="query.orientation != null and query.orientation != ''">
+                AND orientation = #{query.orientation}
+            </if>
+            <if test="query.decoration != null and query.decoration != ''">
+                AND decoration = #{query.decoration}
+            </if>
+            AND status = 1  <!-- 只查询已上架的 -->
+        </where>
+        ORDER BY 
+        <choose>
+            <when test="query.sortBy == 'price'">
+                price ${query.sortOrder}
+            </when>
+            <when test="query.sortBy == 'create_time'">
+                create_time ${query.sortOrder}
+            </when>
+            <otherwise>
+                create_time DESC
+            </otherwise>
+        </choose>
+        LIMIT #{query.size} OFFSET #{query.offset}
+    </select>
+    
+    <select id="countQuery" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM house
+        <where>
+            <if test="query.keyword != null and query.keyword != ''">
+                AND (title LIKE CONCAT('%', #{query.keyword}, '%')
+                OR description LIKE CONCAT('%', #{query.keyword}, '%'))
+            </if>
+            <if test="query.city != null and query.city != ''">
+                AND city = #{query.city}
+            </if>
+            <if test="query.district != null and query.district != ''">
+                AND district = #{query.district}
+            </if>
+            <if test="query.minPrice != null">
+                AND price >= #{query.minPrice}
+            </if>
+            <if test="query.maxPrice != null">
+                AND price &lt;= #{query.maxPrice}
+            </if>
+            <if test="query.bedroomCount != null">
+                AND bedroom_count = #{query.bedroomCount}
+            </if>
+            AND status = 1
+        </where>
+    </select>
+    
+    <update id="update">
+        UPDATE house
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="price != null">price = #{price},</if>
+            <if test="area != null">area = #{area},</if>
+            <if test="status != null">status = #{status},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <update id="updateStatus">
+        UPDATE house SET status = #{status} WHERE id = #{id}
+    </update>
+    
+    <update id="incrementViewCount">
+        UPDATE house SET view_count = view_count + 1 WHERE id = #{id}
+    </update>
+    
+    <update id="incrementFavoriteCount">
+        UPDATE house SET favorite_count = favorite_count + 1 WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM house WHERE id = #{id}
+    </delete>
+</mapper>
+3.4 HouseImageMapper.xml
+xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.HouseImageMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.HouseImage">
+        <id column="id" property="id"/>
+        <result column="house_id" property="houseId"/>
+        <result column="image_url" property="imageUrl"/>
+        <result column="sort" property="sort"/>
+        <result column="type" property="type"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+    
+    <insert id="insertBatch">
+        INSERT INTO house_image (house_id, image_url, sort, type) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.houseId}, #{item.imageUrl}, #{item.sort}, #{item.type})
+        </foreach>
+    </insert>
+    
+    <select id="findByHouseId" resultMap="BaseResultMap">
+        SELECT id, house_id, image_url, sort, type, create_time
+        FROM house_image
+        WHERE house_id = #{houseId}
+        ORDER BY sort ASC
+    </select>
+    
+    <select id="findCoverByHouseId" resultMap="BaseResultMap">
+        SELECT id, house_id, image_url, sort, type, create_time
+        FROM house_image
+        WHERE house_id = #{houseId} AND type = 1
+        LIMIT 1
+    </select>
+    
+    <delete id="deleteByHouseId">
+        DELETE FROM house_image WHERE house_id = #{houseId}
+    </delete>
+</mapper>
+四、创建 Service 层
+4.1 HouseService.java
+java
+package com.example.houserentalsystem.service;
+
+import com.example.houserentalsystem.dto.HousePublishDTO;
+import com.example.houserentalsystem.dto.HouseQueryDTO;
+import com.example.houserentalsystem.entity.House;
+import com.example.houserentalsystem.vo.HouseVO;
+import java.util.List;
+import java.util.Map;
+
+public interface HouseService {
+    
+    // 发布房源
+    HouseVO publish(Long landlordId, HousePublishDTO publishDTO);
+    
+    // 根据ID查询房源详情
+    HouseVO getHouseDetail(Long id);
+    
+    // 分页查询房源
+    Map<String, Object> pageQuery(HouseQueryDTO queryDTO);
+    
+    // 查询房东的房源列表
+    List<HouseVO> getLandlordHouses(Long landlordId);
+    
+    // 更新房源
+    HouseVO updateHouse(Long id, Long landlordId, HousePublishDTO updateDTO);
+    
+    // 删除房源
+    void deleteHouse(Long id, Long landlordId);
+    
+    // 上架/下架
+    void updateStatus(Long id, Long landlordId, Integer status);
+}
+4.2 HouseServiceImpl.java
+java
+package com.example.houserentalsystem.service.impl;
+
+import com.example.houserentalsystem.common.BusinessException;
+import com.example.houserentalsystem.dto.HousePublishDTO;
+import com.example.houserentalsystem.dto.HouseQueryDTO;
+import com.example.houserentalsystem.entity.House;
+import com.example.houserentalsystem.entity.HouseImage;
+import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.mapper.HouseMapper;
+import com.example.houserentalsystem.mapper.HouseImageMapper;
+import com.example.houserentalsystem.mapper.UserMapper;
+import com.example.houserentalsystem.service.HouseService;
+import com.example.houserentalsystem.vo.HouseVO;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class HouseServiceImpl implements HouseService {
+
+    @Autowired
+    private HouseMapper houseMapper;
+
+    @Autowired
+    private HouseImageMapper houseImageMapper;
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Override
+    @Transactional
+    public HouseVO publish(Long landlordId, HousePublishDTO publishDTO) {
+        // 1. 检查房东是否存在
+        User landlord = userMapper.findById(landlordId);
+        if (landlord == null || landlord.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能发布房源");
+        }
+
+        // 2. 创建房源
+        House house = new House();
+        BeanUtils.copyProperties(publishDTO, house);
+        house.setLandlordId(landlordId);
+        house.setStatus(0); // 待审核
+        house.setViewCount(0);
+        house.setFavoriteCount(0);
+
+        houseMapper.insert(house);
+
+        // 3. 保存图片
+        if (publishDTO.getImageUrls() != null && !publishDTO.getImageUrls().isEmpty()) {
+            List<HouseImage> images = new ArrayList<>();
+            for (int i = 0; i < publishDTO.getImageUrls().size(); i++) {
+                HouseImage image = new HouseImage();
+                image.setHouseId(house.getId());
+                image.setImageUrl(publishDTO.getImageUrls().get(i));
+                image.setSort(i);
+                image.setType(i == 0 ? 1 : 2); // 第一张设为封面
+                images.add(image);
+            }
+            houseImageMapper.insertBatch(images);
+        }
+
+        return convertToVO(house);
+    }
+
+    @Override
+    public HouseVO getHouseDetail(Long id) {
+        // 1. 查询房源
+        House house = houseMapper.findById(id);
+        if (house == null) {
+            throw new BusinessException("房源不存在");
+        }
+
+        // 2. 增加浏览次数
+        houseMapper.incrementViewCount(id);
+
+        return convertToVO(house);
+    }
+
+    @Override
+    public Map<String, Object> pageQuery(HouseQueryDTO queryDTO) {
+        // 计算分页偏移量
+        int offset = (queryDTO.getPage() - 1) * queryDTO.getSize();
+        
+        // 由于MyBatis XML中直接用#{query.xxx}，需要设置offset
+        // 这里我们简单处理，直接用queryDTO
+        List<House> houses = houseMapper.pageQuery(queryDTO);
+        Long total = houseMapper.countQuery(queryDTO);
+
+        List<HouseVO> voList = houses.stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", voList);
+        result.put("total", total);
+        result.put("page", queryDTO.getPage());
+        result.put("size", queryDTO.getSize());
+        result.put("pages", (total + queryDTO.getSize() - 1) / queryDTO.getSize());
+
+        return result;
+    }
+
+    @Override
+    public List<HouseVO> getLandlordHouses(Long landlordId) {
+        List<House> houses = houseMapper.findByLandlordId(landlordId);
+        return houses.stream()
+                .map(this::convertToVO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public HouseVO updateHouse(Long id, Long landlordId, HousePublishDTO updateDTO) {
+        // 1. 检查房源是否存在且属于该房东
+        House house = houseMapper.findById(id);
+        if (house == null) {
+            throw new BusinessException("房源不存在");
+        }
+        if (!house.getLandlordId().equals(landlordId)) {
+            throw new BusinessException("无权修改此房源");
+        }
+
+        // 2. 更新房源信息
+        BeanUtils.copyProperties(updateDTO, house);
+        house.setId(id);
+        houseMapper.update(house);
+
+        // 3. 更新图片（先删除旧图，再添加新图）
+        if (updateDTO.getImageUrls() != null && !updateDTO.getImageUrls().isEmpty()) {
+            houseImageMapper.deleteByHouseId(id);
+            
+            List<HouseImage> images = new ArrayList<>();
+            for (int i = 0; i < updateDTO.getImageUrls().size(); i++) {
+                HouseImage image = new HouseImage();
+                image.setHouseId(id);
+                image.setImageUrl(updateDTO.getImageUrls().get(i));
+                image.setSort(i);
+                image.setType(i == 0 ? 1 : 2);
+                images.add(image);
+            }
+            houseImageMapper.insertBatch(images);
+        }
+
+        return convertToVO(house);
+    }
+
+    @Override
+    @Transactional
+    public void deleteHouse(Long id, Long landlordId) {
+        House house = houseMapper.findById(id);
+        if (house == null) {
+            throw new BusinessException("房源不存在");
+        }
+        if (!house.getLandlordId().equals(landlordId)) {
+            throw new BusinessException("无权删除此房源");
+        }
+
+        // 删除房源（物理删除）
+        houseMapper.deleteById(id);
+        // 删除关联图片
+        houseImageMapper.deleteByHouseId(id);
+    }
+
+    @Override
+    public void updateStatus(Long id, Long landlordId, Integer status) {
+        House house = houseMapper.findById(id);
+        if (house == null) {
+            throw new BusinessException("房源不存在");
+        }
+        if (!house.getLandlordId().equals(landlordId)) {
+            throw new BusinessException("无权操作此房源");
+        }
+
+        houseMapper.updateStatus(id, status);
+    }
+
+    /**
+     * 将House实体转换为VO（包含图片和房东信息）
+     */
+    private HouseVO convertToVO(House house) {
+        HouseVO vo = new HouseVO();
+        BeanUtils.copyProperties(house, vo);
+
+        // 1. 查询房源图片
+        List<HouseImage> images = houseImageMapper.findByHouseId(house.getId());
+        List<String> imageUrls = images.stream()
+                .map(HouseImage::getImageUrl)
+                .collect(Collectors.toList());
+        vo.setImageUrls(imageUrls);
+
+        // 2. 设置封面图
+        images.stream()
+                .filter(img -> img.getType() == 1)
+                .findFirst()
+                .ifPresent(img -> vo.setCoverImage(img.getImageUrl()));
+
+        // 3. 查询房东信息
+        User landlord = userMapper.findById(house.getLandlordId());
+        if (landlord != null) {
+            vo.setLandlordName(landlord.getRealName());
+            vo.setLandlordPhone(landlord.getPhone());
+        }
+
+        return vo;
+    }
+}
+五、创建 Controller
+在 controller 包下创建 HouseController.java：
+
+java
+package com.example.houserentalsystem.controller;
+
+import com.example.houserentalsystem.annotation.RequireToken;
+import com.example.houserentalsystem.common.BusinessException;
+import com.example.houserentalsystem.common.Result;
+import com.example.houserentalsystem.dto.HousePublishDTO;
+import com.example.houserentalsystem.dto.HouseQueryDTO;
+import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.service.HouseService;
+import com.example.houserentalsystem.service.UserService;
+import com.example.houserentalsystem.vo.HouseVO;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/house")
+public class HouseController {
+
+    @Autowired
+    private HouseService houseService;
+
+    @Autowired
+    private UserService userService;
+
+    /**
+     * 发布房源（需要房东权限）
+     */
+    @PostMapping("/publish")
+    @RequireToken
+    public Result<HouseVO> publish(HttpServletRequest request, @RequestBody HousePublishDTO publishDTO) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能发布房源");
+        }
+
+        HouseVO houseVO = houseService.publish(userId, publishDTO);
+        return Result.success("发布成功", houseVO);
+    }
+
+    /**
+     * 获取房源详情
+     */
+    @GetMapping("/detail/{id}")
+    public Result<HouseVO> getDetail(@PathVariable Long id) {
+        HouseVO houseVO = houseService.getHouseDetail(id);
+        return Result.success(houseVO);
+    }
+
+    /**
+     * 分页查询房源
+     */
+    @GetMapping("/list")
+    public Result<Map<String, Object>> list(HouseQueryDTO queryDTO) {
+        Map<String, Object> pageResult = houseService.pageQuery(queryDTO);
+        return Result.success(pageResult);
+    }
+
+    /**
+     * 获取当前房东的房源列表
+     */
+    @GetMapping("/my-houses")
+    @RequireToken
+    public Result<List<HouseVO>> getMyHouses(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能查看自己的房源");
+        }
+
+        List<HouseVO> houses = houseService.getLandlordHouses(userId);
+        return Result.success(houses);
+    }
+
+    /**
+     * 更新房源
+     */
+    @PutMapping("/update/{id}")
+    @RequireToken
+    public Result<HouseVO> update(HttpServletRequest request, 
+                                  @PathVariable Long id, 
+                                  @RequestBody HousePublishDTO updateDTO) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能修改房源");
+        }
+
+        HouseVO houseVO = houseService.updateHouse(id, userId, updateDTO);
+        return Result.success("更新成功", houseVO);
+    }
+
+    /**
+     * 删除房源
+     */
+    @DeleteMapping("/delete/{id}")
+    @RequireToken
+    public Result<String> delete(HttpServletRequest request, @PathVariable Long id) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能删除房源");
+        }
+
+        houseService.deleteHouse(id, userId);
+        return Result.success("删除成功");
+    }
+
+    /**
+     * 上架房源
+     */
+    @PutMapping("/online/{id}")
+    @RequireToken
+    public Result<String> online(HttpServletRequest request, @PathVariable Long id) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能操作房源");
+        }
+
+        houseService.updateStatus(id, userId, 1);
+        return Result.success("上架成功");
+    }
+
+    /**
+     * 下架房源
+     */
+    @PutMapping("/offline/{id}")
+    @RequireToken
+    public Result<String> offline(HttpServletRequest request, @PathVariable Long id) {
+        Long userId = (Long) request.getAttribute("userId");
+        
+        // 检查是否为房东
+        User user = userService.getById(userId);
+        if (user.getRoleId() != 2) {
+            throw new BusinessException("只有房东才能操作房源");
+        }
+
+        houseService.updateStatus(id, userId, 2);
+        return Result.success("下架成功");
+    }
+}
+六、创建测试文件 test_house.http
+http
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### 1. 登录获取token（用房东账号）
+# @name login
+POST {{baseUrl}}/api/user/login?username=landlord1&password=123456
+
+### 2. 保存token
+@authToken = {{login.response.body.data.token}}
+
+### 3. 发布房源
+POST {{baseUrl}}/api/house/publish
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "title": "望京南地铁站精装一居",
+    "description": "临近地铁，步行5分钟，精装修，家具齐全",
+    "price": 4800.00,
+    "area": 42.5,
+    "bedroomCount": 1,
+    "livingRoomCount": 1,
+    "bathroomCount": 1,
+    "floor": "15/25",
+    "propertyType": "公寓",
+    "decoration": "精装",
+    "orientation": "南",
+    "province": "北京市",
+    "city": "北京市",
+    "district": "朝阳区",
+    "address": "望京街10号院3号楼1502",
+    "imageUrls": [
+        "https://example.com/images/house1_cover.jpg",
+        "https://example.com/images/house1_1.jpg",
+        "https://example.com/images/house1_2.jpg"
+    ]
+}
+
+### 4. 查询房源列表（分页）
+GET {{baseUrl}}/api/house/list?city=北京市&district=朝阳区&page=1&size=10
+
+### 5. 查询房源详情（替换为实际ID）
+GET {{baseUrl}}/api/house/detail/1
+
+### 6. 查询当前房东的房源
+GET {{baseUrl}}/api/house/my-houses
+Authorization: Bearer {{authToken}}
+
+### 7. 更新房源（替换为实际ID）
+PUT {{baseUrl}}/api/house/update/1
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "title": "望京南地铁站精装一居（已更新）",
+    "description": "全新装修，首次出租",
+    "price": 5000.00,
+    "area": 42.5,
+    "bedroomCount": 1,
+    "livingRoomCount": 1,
+    "bathroomCount": 1,
+    "floor": "15/25",
+    "propertyType": "公寓",
+    "decoration": "精装",
+    "orientation": "南",
+    "province": "北京市",
+    "city": "北京市",
+    "district": "朝阳区",
+    "address": "望京街10号院3号楼1502",
+    "imageUrls": [
+        "https://example.com/images/house1_cover_new.jpg",
+        "https://example.com/images/house1_1_new.jpg"
+    ]
+}
+
+### 8. 上架房源
+PUT {{baseUrl}}/api/house/online/1
+Authorization: Bearer {{authToken}}
+
+### 9. 下架房源
+PUT {{baseUrl}}/api/house/offline/1
+Authorization: Bearer {{authToken}}
+
+### 10. 删除房源
+DELETE {{baseUrl}}/api/house/delete/1
+Authorization: Bearer {{authToken}}
+今日任务清单
+创建实体类（House, HouseImage）
+
+创建 DTO 类（HousePublishDTO, HouseVO, HouseQueryDTO）
+
+创建 Mapper 接口和 XML
+
+创建 Service 实现
+
+创建 Controller
+
+用 REST Client 测试所有接口
