@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.UserProfileMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.UserProfile">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="preferred_tags" property="preferredTags"/>
+        <result column="price_min" property="priceMin"/>
+        <result column="price_max" property="priceMax"/>
+        <result column="preferred_districts" property="preferredDistricts"/>
+        <result column="last_update_time" property="lastUpdateTime"/>
+    </resultMap>
+    
+    <insert id="insertOrUpdate">
+        INSERT INTO user_profile (user_id, preferred_tags, price_min, price_max, preferred_districts)
+        VALUES (#{userId}, #{preferredTags}, #{priceMin}, #{priceMax}, #{preferredDistricts})
+        ON DUPLICATE KEY UPDATE
+            preferred_tags = VALUES(preferred_tags),
+            price_min = VALUES(price_min),
+            price_max = VALUES(price_max),
+            preferred_districts = VALUES(preferred_districts)
+    </insert>
+    
+    <select id="findByUserId" resultMap="BaseResultMap">
+        SELECT id, user_id, preferred_tags, price_min, price_max, preferred_districts, last_update_time
+        FROM user_profile
+        WHERE user_id = #{userId}
+    </select>
+    
+    <update id="updatePreferredTags">
+        UPDATE user_profile
+        SET preferred_tags = #{preferredTags}
+        WHERE user_id = #{userId}
+    </update>
+    
+    <update id="updatePricePreference">
+        UPDATE user_profile
+        SET price_min = #{priceMin}, price_max = #{priceMax}
+        WHERE user_id = #{userId}
+    </update>
+    
+    <update id="updateDistricts">
+        UPDATE user_profile
+        SET preferred_districts = #{preferredDistricts}
+        WHERE user_id = #{userId}
+    </update>
+</mapper>

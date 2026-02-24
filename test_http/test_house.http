@@ -74,13 +74,13 @@ Content-Type: application/json
 }
 
 ### 8. 上架房源
-PUT {{baseUrl}}/api/house/online/4
+PUT {{baseUrl}}/api/house/online/5
 Authorization: Bearer {{authToken}}
 
 ### 9. 下架房源
-PUT {{baseUrl}}/api/house/offline/4
+PUT {{baseUrl}}/api/house/offline/5
 Authorization: Bearer {{authToken}}
 
 ### 10. 删除房源
-DELETE {{baseUrl}}/api/house/delete/4
+DELETE {{baseUrl}}/api/house/delete/5
 Authorization: Bearer {{authToken}}

@@ -1,0 +1,120 @@
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### 1. 登录获取token（用新房东账号）
+# @name login
+POST {{baseUrl}}/api/user/login?username=landlord2&password=123456
+
+### 2. 保存token
+@authToken = {{login.response.body.data.token}}
+
+### ==================== 标签管理测试 ====================
+
+### 3. 查询所有标签
+GET {{baseUrl}}/api/tag/list
+
+### 4. 按分类查询标签
+GET {{baseUrl}}/api/tag/category/交通
+
+### 发布新房源
+POST http://localhost:8080/api/house/publish
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "title": "望京南地铁站精装一居（测试标签）",
+    "description": "用于标签功能测试",
+    "price": 4800.00,
+    "area": 42.5,
+    "bedroomCount": 1,
+    "livingRoomCount": 1,
+    "bathroomCount": 1,
+    "floor": "15/25",
+    "propertyType": "公寓",
+    "decoration": "精装",
+    "orientation": "南",
+    "province": "北京市",
+    "city": "北京市",
+    "district": "朝阳区",
+    "address": "望京街10号院3号楼1502",
+    "imageUrls": [
+        "https://example.com/images/house_tag_test.jpg"
+    ]
+}
+
+### 5. 查询房源4的标签
+GET {{baseUrl}}/api/tag/house/1
+
+### 查询所有房源列表
+GET http://localhost:8080/api/house/list?page=1&size=20
+
+### 6. 给房源1添加标签（添加近地铁、精装修、朝南）
+POST {{baseUrl}}/api/house/tag/add
+Authorization: Bearer {{authToken}}
+Content-Type: application/json
+
+{
+    "houseId": 1,
+    "tagIds": [1, 2, 4]
+}
+
+### 7. 再次查询房源1的标签
+GET {{baseUrl}}/api/tag/house/1
+
+### 8. 移除房源1的某个标签（移除朝南）
+DELETE {{baseUrl}}/api/house/tag/remove/1/4
+Authorization: Bearer {{authToken}}
+
+### 9. 再次查询房源4的标签
+GET {{baseUrl}}/api/tag/house/1
+
+### ==================== 用户行为测试 ====================
+
+### 10. 用租客账号登录
+# @name tenantLogin
+POST {{baseUrl}}/api/user/login?username=tenant1&password=123456
+
+### 11. 保存租客token
+@tenantToken = {{tenantLogin.response.body.data.token}}
+
+### 12. 记录浏览行为
+POST {{baseUrl}}/api/behavior/record
+Authorization: Bearer {{tenantToken}}
+Content-Type: application/json
+
+{
+    "houseId": 1,
+    "behaviorType": 1
+}
+
+### 13. 收藏房源1
+POST {{baseUrl}}/api/behavior/favorite/1
+Authorization: Bearer {{tenantToken}}
+
+### 14. 检查是否收藏
+GET {{baseUrl}}/api/behavior/favorite/check/1
+Authorization: Bearer {{tenantToken}}
+
+### 15. 获取行为统计
+GET {{baseUrl}}/api/behavior/stats
+Authorization: Bearer {{tenantToken}}
+
+### 16. 构建用户画像
+POST {{baseUrl}}/api/behavior/profile/build
+Authorization: Bearer {{tenantToken}}
+
+### 17. 获取偏好标签
+GET {{baseUrl}}/api/behavior/profile/tags
+Authorization: Bearer {{tenantToken}}
+
+### 18. 获取价格偏好
+GET {{baseUrl}}/api/behavior/profile/price
+Authorization: Bearer {{tenantToken}}
+
+### 19. 取消收藏
+DELETE {{baseUrl}}/api/behavior/favorite/1
+Authorization: Bearer {{tenantToken}}
+
+### 20. 再次检查收藏
+GET {{baseUrl}}/api/behavior/favorite/check/1
+Authorization: Bearer {{tenantToken}}

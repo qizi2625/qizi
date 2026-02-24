@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.UserBehaviorMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.UserBehavior">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="house_id" property="houseId"/>
+        <result column="behavior_type" property="behaviorType"/>
+        <result column="weight" property="weight"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+    
+    <insert id="insert" parameterType="com.example.houserentalsystem.entity.UserBehavior"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_behavior (user_id, house_id, behavior_type, weight)
+        VALUES (#{userId}, #{houseId}, #{behaviorType}, #{weight})
+    </insert>
+    
+    <select id="findByUserId" resultMap="BaseResultMap">
+        SELECT id, user_id, house_id, behavior_type, weight, create_time
+        FROM user_behavior
+        WHERE user_id = #{userId}
+        ORDER BY create_time DESC
+    </select>
+    
+    <select id="checkFavorite" resultType="java.lang.Integer">
+        SELECT COUNT(*)
+        FROM user_behavior
+        WHERE user_id = #{userId} AND house_id = #{houseId} AND behavior_type = 2
+    </select>
+    
+    <delete id="deleteFavorite">
+        DELETE FROM user_behavior
+        WHERE user_id = #{userId} AND house_id = #{houseId} AND behavior_type = 2
+    </delete>
+    
+    <select id="countUserBehaviors" resultType="java.util.Map">
+        SELECT 
+            SUM(CASE WHEN behavior_type = 1 THEN 1 ELSE 0 END) as view_count,
+            SUM(CASE WHEN behavior_type = 2 THEN 1 ELSE 0 END) as favorite_count,
+            SUM(CASE WHEN behavior_type = 3 THEN 1 ELSE 0 END) as consult_count,
+            SUM(CASE WHEN behavior_type = 4 THEN 1 ELSE 0 END) as share_count
+        FROM user_behavior
+        WHERE user_id = #{userId}
+    </select>
+    
+    <select id="getUserPreferredTags" resultType="java.util.Map">
+        SELECT 
+            t.id as tag_id,
+            t.tag_name,
+            COUNT(*) as frequency,
+            SUM(ub.weight) as total_weight
+        FROM user_behavior ub
+        JOIN house_tag ht ON ub.house_id = ht.house_id
+        JOIN tag t ON ht.tag_id = t.id
+        WHERE ub.user_id = #{userId}
+        GROUP BY t.id, t.tag_name
+        ORDER BY total_weight DESC, frequency DESC
+        LIMIT 10
+    </select>
+</mapper>

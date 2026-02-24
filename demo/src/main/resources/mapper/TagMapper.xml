@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.houserentalsystem.mapper.TagMapper">
+    
+    <resultMap id="BaseResultMap" type="com.example.houserentalsystem.entity.Tag">
+        <id column="id" property="id"/>
+        <result column="tag_name" property="tagName"/>
+        <result column="tag_code" property="tagCode"/>
+        <result column="category" property="category"/>
+        <result column="icon" property="icon"/>
+        <result column="sort" property="sort"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+    
+    <sql id="Base_Column_List">
+        id, tag_name, tag_code, category, icon, sort, create_time
+    </sql>
+    
+    <insert id="insert" parameterType="com.example.houserentalsystem.entity.Tag" 
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tag (tag_name, tag_code, category, icon, sort)
+        VALUES (#{tagName}, #{tagCode}, #{category}, #{icon}, #{sort})
+    </insert>
+    
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM tag
+        WHERE id = #{id}
+    </select>
+    
+    <select id="findAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM tag
+        ORDER BY sort ASC, id ASC
+    </select>
+    
+    <select id="findByCategory" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM tag
+        WHERE category = #{category}
+        ORDER BY sort ASC
+    </select>
+    
+    <select id="findByHouseId" resultMap="BaseResultMap">
+        SELECT t.id, t.tag_name, t.tag_code, t.category, t.icon, t.sort, t.create_time
+        FROM tag t
+        JOIN house_tag ht ON t.id = ht.tag_id
+        WHERE ht.house_id = #{houseId}
+        ORDER BY t.sort ASC
+    </select>
+    
+    <update id="update" parameterType="com.example.houserentalsystem.entity.Tag">
+        UPDATE tag
+        <set>
+            <if test="tagName != null">tag_name = #{tagName},</if>
+            <if test="tagCode != null">tag_code = #{tagCode},</if>
+            <if test="category != null">category = #{category},</if>
+            <if test="icon != null">icon = #{icon},</if>
+            <if test="sort != null">sort = #{sort},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+    
+    <delete id="deleteById">
+        DELETE FROM tag WHERE id = #{id}
+    </delete>
+</mapper>

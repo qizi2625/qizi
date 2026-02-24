@@ -6,11 +6,14 @@ import com.example.houserentalsystem.dto.HouseQueryDTO;
 import com.example.houserentalsystem.entity.House;
 import com.example.houserentalsystem.entity.HouseImage;
 import com.example.houserentalsystem.entity.User;
+import com.example.houserentalsystem.entity.Tag;
 import com.example.houserentalsystem.mapper.HouseMapper;
 import com.example.houserentalsystem.mapper.HouseImageMapper;
 import com.example.houserentalsystem.mapper.UserMapper;
+import com.example.houserentalsystem.mapper.TagMapper;
 import com.example.houserentalsystem.service.HouseService;
 import com.example.houserentalsystem.vo.HouseVO;
+import com.example.houserentalsystem.vo.TagVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -33,6 +36,9 @@ public class HouseServiceImpl implements HouseService {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private TagMapper tagMapper;
 
     @Override
     @Transactional
@@ -203,6 +209,17 @@ public class HouseServiceImpl implements HouseService {
             vo.setLandlordName(landlord.getRealName());
             vo.setLandlordPhone(landlord.getPhone());
         }
+
+        // 4. 查询房源标签
+        List<Tag> tags = tagMapper.findByHouseId(house.getId());
+        List<TagVO> tagVOs = tags.stream()
+                .map(tag -> {
+                    TagVO tagVO = new TagVO();
+                    BeanUtils.copyProperties(tag, tagVO);
+                    return tagVO;
+                })
+                .collect(Collectors.toList());
+        vo.setTags(tagVOs);
 
         return vo;
     }

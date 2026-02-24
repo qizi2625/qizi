@@ -32,4 +32,5 @@ public class HouseVO {
     private LocalDateTime createTime;
     private List<String> imageUrls;  // 图片列表
     private String coverImage;  // 封面图
+    private List<TagVO> tags;  //标签
 }
