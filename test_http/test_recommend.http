@@ -1,0 +1,62 @@
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### ==================== 登录不同用户测试推荐 ====================
+
+### 1. 登录租客1（有行为数据的用户）
+# @name tenantLogin
+POST {{baseUrl}}/api/user/login?username=tenant1&password=123456
+
+### 2. 保存租客token
+@tenantToken = {{tenantLogin.response.body.data.token}}
+
+### 3. 获取租客1的个性化推荐
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{tenantToken}}
+
+### 4. 获取今日精选
+GET {{baseUrl}}/api/recommend/daily?size=10
+Authorization: Bearer {{tenantToken}}
+
+### 注册租客2
+POST {{baseUrl}}/api/user/register
+Content-Type: application/json
+
+{
+    "username": "tenant2",
+    "password": "123456",
+    "phone": "13900000002",
+    "email": "tenant2@example.com",
+    "realName": "李租客",
+    "roleId": 3
+}
+
+### 5. 登录新租客（没有行为数据的用户）
+# @name newTenantLogin
+POST {{baseUrl}}/api/user/login?username=tenant2&password=123456
+
+### 6. 保存新租客token
+@newTenantToken = {{newTenantLogin.response.body.data.token}}
+
+### 7. 获取新租客的推荐（应该返回热门房源）
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{newTenantToken}}
+
+### ==================== 通用推荐接口 ====================
+
+### 8. 获取热门房源
+GET {{baseUrl}}/api/recommend/hot?size=10
+
+### 9. 获取最新房源
+GET {{baseUrl}}/api/recommend/new?size=10
+
+### 10. 获取房源4的相似推荐
+GET {{baseUrl}}/api/recommend/similar/6?size=6
+
+### 11. 刷新租客1的推荐缓存
+POST {{baseUrl}}/api/recommend/refresh
+Authorization: Bearer {{tenantToken}}
+
+### 12. 再次获取个性化推荐（应该重新计算）
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{tenantToken}}

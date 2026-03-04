@@ -52,5 +52,17 @@
             #{realName}, #{idCard}, #{roleId}, #{status}
         )
     </insert>
+
+    <!-- 查找最近 days 天内有行为的用户ID -->
+    <select id="findActiveUserIds" resultType="java.lang.Long">
+        SELECT DISTINCT u.id
+        FROM user u
+        WHERE EXISTS (
+            SELECT 1 FROM user_behavior ub 
+            WHERE ub.user_id = u.id 
+            AND ub.create_time >= DATE_SUB(NOW(), INTERVAL #{days} DAY)
+        )
+        ORDER BY u.id
+    </select>
     
 </mapper>

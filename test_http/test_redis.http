@@ -1,0 +1,72 @@
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### ==================== Redis 基础功能测试 ====================
+
+### 1. 设置字符串缓存
+GET {{baseUrl}}/api/test/redis/set?key=test:hello&value=HelloRedis
+
+### 2. 获取字符串缓存
+GET {{baseUrl}}/api/test/redis/get?key=test:hello
+
+### 3. 直接获取字符串（不转对象）
+GET {{baseUrl}}/api/test/redis/getString?key=test:hello
+
+### 4. 设置带过期时间的缓存（5秒）
+GET {{baseUrl}}/api/test/redis/setWithExpire?key=test:expire&value=WillDisappear&timeout=5
+
+### 5. 立即获取过期缓存（应该有值）
+GET {{baseUrl}}/api/test/redis/get?key=test:expire
+
+### 6. 等待6秒后手动执行这个请求（应该返回null）
+GET {{baseUrl}}/api/test/redis/get?key=test:expire
+
+### 7. 删除缓存
+DELETE {{baseUrl}}/api/test/redis/delete?key=test:hello
+
+### 8. 确认删除
+GET {{baseUrl}}/api/test/redis/get?key=test:hello
+
+### ==================== Redis 对象存储测试 ====================
+
+### 9. 存储对象
+GET {{baseUrl}}/api/test/redis/setObject
+
+### 10. 获取对象
+GET {{baseUrl}}/api/test/redis/getObject
+
+### 11. 存储列表对象
+GET {{baseUrl}}/api/test/redis/setList
+
+### 12. 获取列表对象
+GET {{baseUrl}}/api/test/redis/getList
+
+### ==================== Redis 计数器测试 ====================
+
+### 13. 计数器自增（每次+1）
+GET {{baseUrl}}/api/test/redis/increment?key=test:counter
+
+### 14. 计数器自增（每次+5）
+GET {{baseUrl}}/api/test/redis/increment?key=test:counter&delta=5
+
+### 15. 获取计数器当前值
+GET {{baseUrl}}/api/test/redis/get?key=test:counter
+
+### ==================== Redis 其他操作测试 ====================
+
+### 16. 判断key是否存在
+GET {{baseUrl}}/api/test/redis/hasKey?key=test:counter
+
+### 17. 获取过期时间
+GET {{baseUrl}}/api/test/redis/getExpire?key=test:counter
+
+### 18. 设置过期时间（60秒）
+GET {{baseUrl}}/api/test/redis/expire?key=test:counter&timeout=60
+
+### 19. 再次获取过期时间
+GET {{baseUrl}}/api/test/redis/getExpire?key=test:counter
+
+### ==================== Redis 测试清理 ====================
+
+### 20. 清理测试数据
+DELETE {{baseUrl}}/api/test/redis/clean

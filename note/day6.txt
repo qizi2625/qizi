@@ -1,0 +1,864 @@
+第六天：智能推荐引擎 🎯
+恭喜进入第六天！今天我们要实现真正的智能推荐系统，基于前五天积累的用户行为数据和标签系统。
+
+今日任务清单
+| 步骤 | 任务 | 说明 |
+|:---:|::---|:---|
+| 1 | 创建推荐相关的 DTO | 推荐结果封装 |
+| 2 | 实现标签匹配算法 | 计算用户偏好与房源匹配度 |
+| 3 | 实现协同过滤（可选） | 基于用户的协同过滤 |
+| 4 | 热门房源推荐 | 基于浏览/收藏量 |
+| 5 | 相似房源推荐 | 基于标签相似度 |
+| 6 | 创建推荐 Service | 推荐逻辑实现 |
+| 7 | 创建推荐 Controller | 推荐接口 |
+| 8 | 添加缓存支持 | Redis 缓存推荐结果 |
+| 9 | 创建定时任务 | 离线计算用户画像 |
+| 10 | 测试所有接口 | 用 REST Client |
+
+一、创建推荐相关的 DTO
+1.1 RecommendHouseVO.java
+在 vo 包下创建：
+
+java
+package com.example.houserentalsystem.vo;
+
+import lombok.Data;
+import java.math.BigDecimal;
+import java.util.List;
+
+@Data
+public class RecommendHouseVO {
+    private Long id;
+    private String title;
+    private BigDecimal price;
+    private BigDecimal area;
+    private String coverImage;
+    private String district;
+    private Integer bedroomCount;
+    private Integer livingRoomCount;
+    private Integer bathroomCount;
+    private String decoration;
+    private String orientation;
+    private Double matchScore;  // 匹配度分数
+    private List<TagVO> tags;    // 房源标签
+    private Integer viewCount;
+    private Integer favoriteCount;
+}
+1.2 RecommendContext.java（推荐上下文）
+java
+package com.example.houserentalsystem.dto;
+
+import lombok.Data;
+import java.util.List;
+import java.util.Map;
+
+@Data
+public class RecommendContext {
+    private Long userId;
+    private Map<String, Double> userTagPreferences;  // 用户标签偏好
+    private List<Long> viewedHouseIds;                // 已浏览过的房源
+    private List<Long> favoriteHouseIds;              // 收藏的房源
+    private Integer limit;                             // 推荐数量
+}
+二、创建推荐算法工具类
+2.1 RecommendationAlgorithm.java
+在 utils 包下创建：
+
+java
+package com.example.houserentalsystem.utils;
+
+import com.example.houserentalsystem.entity.House;
+import com.example.houserentalsystem.entity.Tag;
+import com.example.houserentalsystem.vo.TagVO;
+import org.springframework.stereotype.Component;
+
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Component
+public class RecommendationAlgorithm {
+
+    /**
+     * 计算用户与房源的匹配度（基于标签）
+     */
+    public double calculateMatchScore(Map<String, Double> userTagPreferences, 
+                                      List<Tag> houseTags,
+                                      BigDecimal userPriceMin,
+                                      BigDecimal userPriceMax,
+                                      BigDecimal housePrice) {
+        double score = 0.0;
+        
+        // 1. 标签匹配度（权重 0.6）
+        if (userTagPreferences != null && !userTagPreferences.isEmpty() && houseTags != null) {
+            double tagScore = 0.0;
+            double totalWeight = 0.0;
+            
+            for (Tag tag : houseTags) {
+                Double preference = userTagPreferences.get(tag.getTagName());
+                if (preference != null) {
+                    tagScore += preference;
+                    totalWeight += 1.0;
+                }
+            }
+            
+            if (totalWeight > 0) {
+                tagScore = tagScore / totalWeight;  // 归一化
+                score += tagScore * 0.6;
+            }
+        }
+        
+        // 2. 价格匹配度（权重 0.3）
+        if (userPriceMin != null && userPriceMax != null && housePrice != null) {
+            double priceScore = calculatePriceMatchScore(userPriceMin, userPriceMax, housePrice);
+            score += priceScore * 0.3;
+        }
+        
+        // 3. 基础热度加成（权重 0.1）
+        // 这部分在调用时动态计算
+        
+        return score;
+    }
+
+    /**
+     * 计算价格匹配度
+     */
+    private double calculatePriceMatchScore(BigDecimal userMin, BigDecimal userMax, BigDecimal housePrice) {
+        // 如果房源价格在用户偏好范围内，得1分
+        if (housePrice.compareTo(userMin) >= 0 && housePrice.compareTo(userMax) <= 0) {
+            return 1.0;
+        }
+        
+        // 计算距离偏好区间的远近
+        BigDecimal diff;
+        if (housePrice.compareTo(userMin) < 0) {
+            diff = userMin.subtract(housePrice);
+        } else {
+            diff = housePrice.subtract(userMax);
+        }
+        
+        // 价格范围宽度
+        BigDecimal range = userMax.subtract(userMin);
+        if (range.compareTo(BigDecimal.ZERO) == 0) {
+            return 0.0;
+        }
+        
+        // 距离越远分数越低
+        double ratio = diff.divide(range, 2, BigDecimal.ROUND_HALF_UP).doubleValue();
+        return Math.max(0, 1.0 - ratio);
+    }
+
+    /**
+     * 计算房源之间的相似度（基于标签）
+     */
+    public double calculateHouseSimilarity(List<Tag> tags1, List<Tag> tags2) {
+        if (tags1 == null || tags2 == null || tags1.isEmpty() || tags2.isEmpty()) {
+            return 0.0;
+        }
+        
+        Set<Long> tagIds1 = tags1.stream().map(Tag::getId).collect(Collectors.toSet());
+        Set<Long> tagIds2 = tags2.stream().map(Tag::getId).collect(Collectors.toSet());
+        
+        // 计算交集大小
+        Set<Long> intersection = new HashSet<>(tagIds1);
+        intersection.retainAll(tagIds2);
+        
+        // 计算并集大小
+        Set<Long> union = new HashSet<>(tagIds1);
+        union.addAll(tagIds2);
+        
+        // Jaccard相似度
+        return union.isEmpty() ? 0.0 : (double) intersection.size() / union.size();
+    }
+
+    /**
+     * 排序推荐结果
+     */
+    public <T> List<T> sortRecommendations(List<T> items, Map<T, Double> scores, int limit) {
+        return items.stream()
+                .sorted((a, b) -> Double.compare(scores.getOrDefault(b, 0.0), scores.getOrDefault(a, 0.0)))
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+}
+三、创建推荐 Service
+3.1 RecommendService.java
+java
+package com.example.houserentalsystem.service;
+
+import com.example.houserentalsystem.vo.RecommendHouseVO;
+
+import java.util.List;
+
+public interface RecommendService {
+
+    /**
+     * 获取用户的个性化推荐（猜你喜欢）
+     */
+    List<RecommendHouseVO> getPersonalizedRecommendations(Long userId, int size);
+
+    /**
+     * 获取相似房源推荐
+     */
+    List<RecommendHouseVO> getSimilarHouses(Long houseId, int size);
+
+    /**
+     * 获取热门房源推荐
+     */
+    List<RecommendHouseVO> getHotHouses(int size);
+
+    /**
+     * 获取最新房源推荐
+     */
+    List<RecommendHouseVO> getNewHouses(int size);
+
+    /**
+     * 获取今日精选（混合推荐）
+     */
+    List<RecommendHouseVO> getDailyPicks(Long userId, int size);
+
+    /**
+     * 刷新用户推荐缓存
+     */
+    void refreshUserRecommendations(Long userId);
+}
+3.2 RecommendServiceImpl.java
+java
+package com.example.houserentalsystem.service.impl;
+
+import com.example.houserentalsystem.common.BusinessException;
+import com.example.houserentalsystem.entity.*;
+import com.example.houserentalsystem.mapper.*;
+import com.example.houserentalsystem.service.RecommendService;
+import com.example.houserentalsystem.utils.RecommendationAlgorithm;
+import com.example.houserentalsystem.vo.RecommendHouseVO;
+import com.example.houserentalsystem.vo.TagVO;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+@Service
+public class RecommendServiceImpl implements RecommendService {
+
+    @Autowired
+    private HouseMapper houseMapper;
+
+    @Autowired
+    private TagMapper tagMapper;
+
+    @Autowired
+    private UserBehaviorMapper userBehaviorMapper;
+
+    @Autowired
+    private UserProfileMapper userProfileMapper;
+
+    @Autowired
+    private RecommendationAlgorithm algorithm;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    private static final String RECOMMEND_CACHE_KEY = "recommend:user:";
+    private static final String HOT_HOUSES_KEY = "recommend:hot";
+    private static final String NEW_HOUSES_KEY = "recommend:new";
+    private static final int CACHE_EXPIRE_HOURS = 24;
+
+    @Override
+    public List<RecommendHouseVO> getPersonalizedRecommendations(Long userId, int size) {
+        // 1. 尝试从缓存获取
+        String cacheKey = RECOMMEND_CACHE_KEY + userId;
+        String cached = redisTemplate.opsForValue().get(cacheKey);
+        if (cached != null) {
+            try {
+                return objectMapper.readValue(cached, new TypeReference<List<RecommendHouseVO>>() {});
+            } catch (Exception e) {
+                // 缓存解析失败，重新计算
+            }
+        }
+
+        // 2. 获取用户画像
+        UserProfile profile = userProfileMapper.findByUserId(userId);
+        if (profile == null) {
+            // 新用户：返回热门房源
+            return getHotHouses(size);
+        }
+
+        // 3. 解析用户偏好标签
+        Map<String, Double> tagPreferences = new HashMap<>();
+        if (profile.getPreferredTags() != null) {
+            try {
+                tagPreferences = objectMapper.readValue(
+                        profile.getPreferredTags(),
+                        new TypeReference<Map<String, Double>>() {}
+                );
+            } catch (Exception e) {
+                // 解析失败，使用空Map
+            }
+        }
+
+        // 4. 获取所有可推荐房源（排除已浏览/收藏的）
+        List<House> allHouses = getAllRecommendableHouses();
+        
+        // 5. 获取用户已交互的房源ID
+        List<Long> interactedHouseIds = getInteractedHouseIds(userId);
+
+        // 6. 计算每个房源的匹配分数
+        Map<House, Double> scores = new HashMap<>();
+        for (House house : allHouses) {
+            if (interactedHouseIds.contains(house.getId())) {
+                continue; // 跳过已交互的房源
+            }
+
+            List<Tag> houseTags = tagMapper.findByHouseId(house.getId());
+            
+            double score = algorithm.calculateMatchScore(
+                    tagPreferences,
+                    houseTags,
+                    profile.getPriceMin(),
+                    profile.getPriceMax(),
+                    house.getPrice()
+            );
+
+            // 加上热度加成（浏览量和收藏量）
+            double popularityBonus = calculatePopularityScore(house);
+            score = score * 0.7 + popularityBonus * 0.3;
+
+            scores.put(house, score);
+        }
+
+        // 7. 排序并返回结果
+        List<House> topHouses = algorithm.sortRecommendations(
+                new ArrayList<>(scores.keySet()),
+                scores,
+                size
+        );
+
+        List<RecommendHouseVO> result = convertToRecommendVO(topHouses, scores);
+
+        // 8. 缓存结果
+        try {
+            redisTemplate.opsForValue().set(
+                    cacheKey,
+                    objectMapper.writeValueAsString(result),
+                    CACHE_EXPIRE_HOURS,
+                    TimeUnit.HOURS
+            );
+        } catch (Exception e) {
+            // 缓存失败不影响返回结果
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<RecommendHouseVO> getSimilarHouses(Long houseId, int size) {
+        // 1. 获取目标房源
+        House targetHouse = houseMapper.findById(houseId);
+        if (targetHouse == null) {
+            throw new BusinessException("房源不存在");
+        }
+
+        // 2. 获取目标房源的标签
+        List<Tag> targetTags = tagMapper.findByHouseId(houseId);
+
+        // 3. 获取所有其他房源
+        List<House> allHouses = getAllRecommendableHouses();
+
+        // 4. 计算相似度
+        Map<House, Double> similarities = new HashMap<>();
+        for (House house : allHouses) {
+            if (house.getId().equals(houseId)) {
+                continue; // 跳过自身
+            }
+
+            List<Tag> houseTags = tagMapper.findByHouseId(house.getId());
+            double similarity = algorithm.calculateHouseSimilarity(targetTags, houseTags);
+            
+            // 结合价格相似度
+            double priceSimilarity = calculatePriceSimilarity(targetHouse.getPrice(), house.getPrice());
+            similarity = similarity * 0.8 + priceSimilarity * 0.2;
+
+            similarities.put(house, similarity);
+        }
+
+        // 5. 排序返回
+        List<House> similarHouses = algorithm.sortRecommendations(
+                new ArrayList<>(similarities.keySet()),
+                similarities,
+                size
+        );
+
+        return convertToRecommendVO(similarHouses, similarities);
+    }
+
+    @Override
+    public List<RecommendHouseVO> getHotHouses(int size) {
+        // 1. 尝试从缓存获取
+        String cached = redisTemplate.opsForValue().get(HOT_HOUSES_KEY);
+        if (cached != null) {
+            try {
+                return objectMapper.readValue(cached, new TypeReference<List<RecommendHouseVO>>() {});
+            } catch (Exception e) {
+                // 缓存解析失败，重新计算
+            }
+        }
+
+        // 2. 计算热门房源（基于浏览量和收藏量）
+        List<House> allHouses = getAllRecommendableHouses();
+        
+        // 计算热度分数
+        Map<House, Double> hotScores = new HashMap<>();
+        for (House house : allHouses) {
+            double score = calculatePopularityScore(house);
+            hotScores.put(house, score);
+        }
+
+        // 3. 排序返回
+        List<House> hotHouses = algorithm.sortRecommendations(
+                new ArrayList<>(hotScores.keySet()),
+                hotScores,
+                size
+        );
+
+        List<RecommendHouseVO> result = convertToRecommendVO(hotHouses, hotScores);
+
+        // 4. 缓存结果
+        try {
+            redisTemplate.opsForValue().set(
+                    HOT_HOUSES_KEY,
+                    objectMapper.writeValueAsString(result),
+                    6,  // 热门房源6小时更新一次
+                    TimeUnit.HOURS
+            );
+        } catch (Exception e) {
+            // 缓存失败不影响返回结果
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<RecommendHouseVO> getNewHouses(int size) {
+        // 1. 尝试从缓存获取
+        String cached = redisTemplate.opsForValue().get(NEW_HOUSES_KEY);
+        if (cached != null) {
+            try {
+                return objectMapper.readValue(cached, new TypeReference<List<RecommendHouseVO>>() {});
+            } catch (Exception e) {
+                // 缓存解析失败，重新计算
+            }
+        }
+
+        // 2. 获取最新房源
+        HouseQueryDTO queryDTO = new HouseQueryDTO();
+        queryDTO.setPage(1);
+        queryDTO.setSize(size);
+        queryDTO.setSortBy("create_time");
+        queryDTO.setSortOrder("desc");
+        
+        List<House> newHouses = houseMapper.pageQuery(queryDTO);
+
+        List<RecommendHouseVO> result = convertToRecommendVO(newHouses, null);
+
+        // 3. 缓存结果
+        try {
+            redisTemplate.opsForValue().set(
+                    NEW_HOUSES_KEY,
+                    objectMapper.writeValueAsString(result),
+                    1,  // 最新房源1小时更新一次
+                    TimeUnit.HOURS
+            );
+        } catch (Exception e) {
+            // 缓存失败不影响返回结果
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<RecommendHouseVO> getDailyPicks(Long userId, int size) {
+        // 混合推荐：60%个性化 + 30%热门 + 10%最新
+        int personalSize = (int)(size * 0.6);
+        int hotSize = (int)(size * 0.3);
+        int newSize = size - personalSize - hotSize;
+
+        List<RecommendHouseVO> result = new ArrayList<>();
+        
+        // 获取个性化推荐
+        if (personalSize > 0) {
+            result.addAll(getPersonalizedRecommendations(userId, personalSize));
+        }
+        
+        // 获取热门推荐
+        if (hotSize > 0) {
+            result.addAll(getHotHouses(hotSize));
+        }
+        
+        // 获取最新推荐
+        if (newSize > 0) {
+            result.addAll(getNewHouses(newSize));
+        }
+
+        // 去重
+        return result.stream()
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toCollection(() -> 
+                                new TreeSet<>(Comparator.comparing(RecommendHouseVO::getId))),
+                        ArrayList::new
+                ));
+    }
+
+    @Override
+    public void refreshUserRecommendations(Long userId) {
+        String cacheKey = RECOMMEND_CACHE_KEY + userId;
+        redisTemplate.delete(cacheKey);
+        // 触发重新计算（下次访问时）
+    }
+
+    /**
+     * 获取所有可推荐的房源（已上架的）
+     */
+    private List<House> getAllRecommendableHouses() {
+        HouseQueryDTO queryDTO = new HouseQueryDTO();
+        queryDTO.setPage(1);
+        queryDTO.setSize(1000); // 获取足够多的房源
+        return houseMapper.pageQuery(queryDTO);
+    }
+
+    /**
+     * 获取用户已交互的房源ID
+     */
+    private List<Long> getInteractedHouseIds(Long userId) {
+        List<UserBehavior> behaviors = userBehaviorMapper.findByUserId(userId);
+        return behaviors.stream()
+                .map(UserBehavior::getHouseId)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 计算房源热度分数
+     */
+    private double calculatePopularityScore(House house) {
+        // 热度公式：浏览数 * 0.3 + 收藏数 * 0.7
+        int viewCount = house.getViewCount() != null ? house.getViewCount() : 0;
+        int favoriteCount = house.getFavoriteCount() != null ? house.getFavoriteCount() : 0;
+        
+        return viewCount * 0.3 + favoriteCount * 0.7;
+    }
+
+    /**
+     * 计算价格相似度
+     */
+    private double calculatePriceSimilarity(BigDecimal price1, BigDecimal price2) {
+        if (price1 == null || price2 == null || price1.compareTo(BigDecimal.ZERO) == 0) {
+            return 0.0;
+        }
+        
+        double ratio = Math.min(price1.doubleValue(), price2.doubleValue()) /
+                      Math.max(price1.doubleValue(), price2.doubleValue());
+        return ratio;
+    }
+
+    /**
+     * 转换为推荐VO
+     */
+    private List<RecommendHouseVO> convertToRecommendVO(List<House> houses, Map<House, Double> scores) {
+        return houses.stream()
+                .map(house -> {
+                    RecommendHouseVO vo = new RecommendHouseVO();
+                    BeanUtils.copyProperties(house, vo);
+                    
+                    // 设置封面图
+                    List<HouseImage> images = houseImageMapper.findByHouseId(house.getId());
+                    images.stream()
+                            .filter(img -> img.getType() == 1)
+                            .findFirst()
+                            .ifPresent(img -> vo.setCoverImage(img.getImageUrl()));
+                    
+                    // 设置标签
+                    List<Tag> tags = tagMapper.findByHouseId(house.getId());
+                    List<TagVO> tagVOs = tags.stream()
+                            .map(tag -> {
+                                TagVO tagVO = new TagVO();
+                                BeanUtils.copyProperties(tag, tagVO);
+                                return tagVO;
+                            })
+                            .collect(Collectors.toList());
+                    vo.setTags(tagVOs);
+                    
+                    // 设置匹配分数
+                    if (scores != null) {
+                        vo.setMatchScore(scores.get(house));
+                    }
+                    
+                    return vo;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Autowired
+    private HouseImageMapper houseImageMapper;
+}
+四、创建推荐 Controller
+4.1 RecommendController.java
+java
+package com.example.houserentalsystem.controller;
+
+import com.example.houserentalsystem.annotation.RequireToken;
+import com.example.houserentalsystem.common.Result;
+import com.example.houserentalsystem.service.RecommendService;
+import com.example.houserentalsystem.vo.RecommendHouseVO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/recommend")
+public class RecommendController {
+
+    @Autowired
+    private RecommendService recommendService;
+
+    /**
+     * 获取个性化推荐（猜你喜欢）
+     */
+    @GetMapping("/personal")
+    @RequireToken
+    public Result<List<RecommendHouseVO>> getPersonalizedRecommendations(
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "10") int size) {
+        Long userId = (Long) request.getAttribute("userId");
+        List<RecommendHouseVO> recommendations = recommendService.getPersonalizedRecommendations(userId, size);
+        return Result.success(recommendations);
+    }
+
+    /**
+     * 获取相似房源推荐
+     */
+    @GetMapping("/similar/{houseId}")
+    public Result<List<RecommendHouseVO>> getSimilarHouses(
+            @PathVariable Long houseId,
+            @RequestParam(defaultValue = "6") int size) {
+        List<RecommendHouseVO> recommendations = recommendService.getSimilarHouses(houseId, size);
+        return Result.success(recommendations);
+    }
+
+    /**
+     * 获取热门房源推荐
+     */
+    @GetMapping("/hot")
+    public Result<List<RecommendHouseVO>> getHotHouses(
+            @RequestParam(defaultValue = "10") int size) {
+        List<RecommendHouseVO> recommendations = recommendService.getHotHouses(size);
+        return Result.success(recommendations);
+    }
+
+    /**
+     * 获取最新房源推荐
+     */
+    @GetMapping("/new")
+    public Result<List<RecommendHouseVO>> getNewHouses(
+            @RequestParam(defaultValue = "10") int size) {
+        List<RecommendHouseVO> recommendations = recommendService.getNewHouses(size);
+        return Result.success(recommendations);
+    }
+
+    /**
+     * 获取今日精选（混合推荐）
+     */
+    @GetMapping("/daily")
+    @RequireToken
+    public Result<List<RecommendHouseVO>> getDailyPicks(
+            HttpServletRequest request,
+            @RequestParam(defaultValue = "10") int size) {
+        Long userId = (Long) request.getAttribute("userId");
+        List<RecommendHouseVO> recommendations = recommendService.getDailyPicks(userId, size);
+        return Result.success(recommendations);
+    }
+
+    /**
+     * 刷新用户推荐缓存
+     */
+    @PostMapping("/refresh")
+    @RequireToken
+    public Result<String> refreshRecommendations(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        recommendService.refreshUserRecommendations(userId);
+        return Result.success("推荐缓存已刷新");
+    }
+}
+五、添加定时任务（可选）
+5.1 RecommendScheduledTask.java
+java
+package com.example.houserentalsystem.task;
+
+import com.example.houserentalsystem.mapper.UserBehaviorMapper;
+import com.example.houserentalsystem.mapper.UserMapper;
+import com.example.houserentalsystem.mapper.UserProfileMapper;
+import com.example.houserentalsystem.service.BehaviorService;
+import com.example.houserentalsystem.service.RecommendService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+@Component
+@EnableScheduling
+public class RecommendScheduledTask {
+
+    @Autowired
+    private UserMapper userMapper;
+
+    @Autowired
+    private BehaviorService behaviorService;
+
+    @Autowired
+    private RecommendService recommendService;
+
+    /**
+     * 每天凌晨2点更新所有活跃用户的画像
+     */
+    @Scheduled(cron = "0 0 2 * * ?")
+    public void updateUserProfiles() {
+        // 获取最近7天有行为的用户
+        List<Long> activeUserIds = userMapper.findActiveUserIds(7);
+        
+        for (Long userId : activeUserIds) {
+            try {
+                // 重新构建用户画像
+                behaviorService.buildUserProfile(userId);
+                // 刷新推荐缓存
+                recommendService.refreshUserRecommendations(userId);
+            } catch (Exception e) {
+                // 记录日志，继续处理下一个用户
+                System.err.println("更新用户画像失败: userId=" + userId);
+            }
+        }
+    }
+
+    /**
+     * 每小时更新热门房源缓存
+     */
+    @Scheduled(cron = "0 0 * * * ?")
+    public void refreshHotHouses() {
+        // 热门房源缓存会在下次访问时自动刷新
+        // 这里可以预热热门房源
+    }
+}
+六、创建测试文件 test_recommend.http
+http
+### 基础变量
+@baseUrl = http://localhost:8080
+
+### ==================== 登录不同用户测试推荐 ====================
+
+### 1. 登录租客1（有行为数据的用户）
+# @name tenantLogin
+POST {{baseUrl}}/api/user/login?username=tenant1&password=123456
+
+### 2. 保存租客token
+@tenantToken = {{tenantLogin.response.body.data.token}}
+
+### 3. 获取租客1的个性化推荐
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{tenantToken}}
+
+### 4. 获取今日精选
+GET {{baseUrl}}/api/recommend/daily?size=10
+Authorization: Bearer {{tenantToken}}
+
+### 5. 登录新租客（没有行为数据的用户）
+# @name newTenantLogin
+POST {{baseUrl}}/api/user/login?username=tenant2&password=123456
+
+### 6. 保存新租客token
+@newTenantToken = {{newTenantLogin.response.body.data.token}}
+
+### 7. 获取新租客的推荐（应该返回热门房源）
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{newTenantToken}}
+
+### ==================== 通用推荐接口 ====================
+
+### 8. 获取热门房源
+GET {{baseUrl}}/api/recommend/hot?size=10
+
+### 9. 获取最新房源
+GET {{baseUrl}}/api/recommend/new?size=10
+
+### 10. 获取房源4的相似推荐
+GET {{baseUrl}}/api/recommend/similar/4?size=6
+
+### 11. 刷新租客1的推荐缓存
+POST {{baseUrl}}/api/recommend/refresh
+Authorization: Bearer {{tenantToken}}
+
+### 12. 再次获取个性化推荐（应该重新计算）
+GET {{baseUrl}}/api/recommend/personal?size=10
+Authorization: Bearer {{tenantToken}}
+七、Redis 配置（如果还没配）
+7.1 application.properties 添加 Redis 配置
+properties
+# Redis配置
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+spring.data.redis.database=0
+spring.data.redis.timeout=5000ms
+spring.data.redis.lettuce.pool.max-active=8
+spring.data.redis.lettuce.pool.max-idle=8
+spring.data.redis.lettuce.pool.min-idle=0
+7.2 pom.xml 添加 Redis 依赖
+xml
+<!-- Redis -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-pool2</artifactId>
+</dependency>
+八、第六天任务清单
+创建推荐相关的 DTO 类
+
+创建推荐算法工具类
+
+创建推荐 Service 接口和实现
+
+创建推荐 Controller
+
+添加 Redis 配置
+
+创建定时任务（可选）
+
+用 REST Client 测试所有接口
+
+推荐算法原理
+1. 个性化推荐（猜你喜欢）
+text
+分数 = 标签匹配度 × 0.6 + 价格匹配度 × 0.3 + 热度 × 0.1
+2. 相似房源推荐
+text
+相似度 = Jaccard(标签A, 标签B) × 0.8 + 价格相似度 × 0.2
+3. 热门房源
+text
+热度 = 浏览数 × 0.3 + 收藏数 × 0.7
+4. 今日精选（混合推荐）
+text
+60% 个性化 + 30% 热门 + 10% 最新
